@@ -1,0 +1,27 @@
+<configuration>
+    <appender name="ACCESS_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>./logs/access/access.log</file>
+
+        <!-- Daily rollover with compression -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>./logs/access/access-log-%d{yyyy-MM-dd}.%i.gz</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <!-- Or whenever the file size reaches 10MB -->
+                <maxFileSize>10MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <!-- Keep 7 days worth of history -->
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+
+        <encoder>
+            <pattern>
+                %date{yyyy-MM-dd HH:mm:ss.SSS ZZZZ} %message%n
+            </pattern>
+            <!--<immediateFlush>false</immediateFlush>-->
+        </encoder>
+
+    </appender>
+    <logger name="io.netty.handler" level="INFO" additivity="false">
+        <appender-ref ref="ACCESS_FILE"/>
+    </logger>
+</configuration>

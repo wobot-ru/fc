@@ -1,33 +1,46 @@
 resolvers in ThisBuild ++= Seq(Resolver.mavenLocal, "Apache Development Snapshot Repository" at "https://repository.apache.org/content/repositories/snapshots/")
 
-name := "Flink Focus Crawler"
+name := "fc"
 
 version := "0.1-SNAPSHOT"
 
 organization := "ru.wobot"
 
 scalaVersion in ThisBuild := "2.11.7"
-autoScalaLibrary := true
-ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) }
+
+//autoScalaLibrary := true
+//
+//ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) }
 
 
 val flinkVersion = "1.1-SNAPSHOT"
 
 val flinkDependencies = Seq(
   "org.apache.flink" %% "flink-scala" % flinkVersion % "provided",
-  "org.apache.flink" %% "flink-streaming-scala" % flinkVersion % "provided")
+  "org.apache.flink" %% "flink-streaming-scala" % flinkVersion % "provided",
+  "com.typesafe.play" %% "play-ws" % "2.5.4")
 
 lazy val root = (project in file(".")).
   settings(
     libraryDependencies ++= flinkDependencies
   )
 
-mainClass in assembly := Some("ru.wobot.Job")
+mainClass in assembly := Some("ru.wobot.example.BatchFetchJob")
+
+assemblyMergeStrategy in assembly := {
+  case x if x.endsWith(".class") => MergeStrategy.last
+  case x if x.endsWith(".properties") => MergeStrategy.last
+  case x =>
+    val oldStrategy = (assemblyMergeStrategy in assembly).value
+    if (oldStrategy == MergeStrategy.deduplicate)
+      MergeStrategy.first
+    else
+      oldStrategy(x)
+}
+
 
 // make run command include the provided dependencies
-run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run))
-
+run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in(Compile, run), runner in(Compile, run))
 
 // exclude Scala library from assembly
 assemblyOption in assembly := (assemblyOption in assembly).value.copy(includeScala = false)
-

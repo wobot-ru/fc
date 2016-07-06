@@ -1,4 +1,4 @@
-package ru.wobot
+package ru.wobot.example
 
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
