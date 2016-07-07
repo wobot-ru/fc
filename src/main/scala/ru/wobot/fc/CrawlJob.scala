@@ -40,7 +40,6 @@ object CrawlJob {
 
     val result = uris.map(x => x.substring(7).toLong).rebalance.countWindowAll(25).apply((window: GlobalWindow, ids: Iterable[Long], out: Collector[Fetch]) => {
       val all: Future[Seq[Fetch]] = Future.sequence(ids.toSeq.map(id => Fetcher.fetchFriends(id)))
-
       for (fetch <- Await.result(all, Duration.Inf)) {
         out.collect(fetch)
       }
