@@ -50,7 +50,7 @@ object Fetcher {
   }
 
 
-  def fetch(id: Long): String = {
+  def fetchFriendsSync(id: Long): String = {
     Source.fromURL(s"http://api.vk.com/method/friends.get?user_id=$id").mkString
     //    val l: BufferedSource = Source.fromURL("http://httpbin.org/get?test=chakram", "windows-1251")
     //    l.mkString
@@ -61,12 +61,18 @@ object Fetcher {
     system.terminate()
   }
 
+  def fetch(uri: String): Future[Fetch] ={
+    val id: Long = uri.substring(7).replaceAll("/", "").toLong
+    fetchFriends(id)
+  }
+
   def fetchFriends(id: Long): Future[Fetch] = {
-    val url: String = s"http://api.vk.com/method/friends.get?user_id=$id"
+    val api: String = s"http://api.vk.com/method/friends.get?user_id=$id"
+    val url: String = s"vk://id$id"
     //val async: Future[WSResponse] = fetchAsync(id)
 
     //async.flatMap(x=>Future.successful(x.body))
-    fetchAsync(url).map(x => {
+    fetchAsync(api).map(x => {
       x.status match {
         case Status.OK => {
           (x.json \ "error").asOpt[JsValue] match {
@@ -74,11 +80,11 @@ object Fetcher {
             case _ => SuccessFetch[Seq[Long]](url, (x.json \ "response").as[Seq[Long]])
           }
         }
-        case _ => ErrorFetch(url, x.statusText)
+        case _ => ErrorFetch(api, x.statusText)
       }
 
     }).recover {
-      case t: Throwable => ErrorFetch(url, t.toString)
+      case t: Throwable => ErrorFetch(api, t.toString)
     }
   }
 
