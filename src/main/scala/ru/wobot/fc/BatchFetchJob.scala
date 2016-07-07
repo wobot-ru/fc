@@ -1,4 +1,4 @@
-package ru.wobot.example
+package ru.wobot.fc
 
 import java.util.concurrent.TimeUnit
 

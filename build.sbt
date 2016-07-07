@@ -23,6 +23,7 @@ val flinkDependencies = Seq(
   "org.apache.flink" %% "flink-scala" % flinkVersion % "provided",
   "org.apache.flink" %% "flink-streaming-scala" % flinkVersion % "provided",
   "org.apache.flink" %% "flink-hbase" % flinkVersion % "provided",
+  "org.apache.flink" %% "flink-connector-kafka-0.9" % flinkVersion,
   "org.apache.hbase" % "hbase-common" % "0.98.11-hadoop2",
   "com.typesafe.play" %% "play-ws" % "2.5.4")
 
@@ -31,7 +32,7 @@ lazy val root = (project in file(".")).
     libraryDependencies ++= flinkDependencies
   )
 
-mainClass in assembly := Some("ru.wobot.example.BatchFetchJob")
+mainClass in assembly := Some("ru.wobot.example.CrawlJob")
 
 assemblyMergeStrategy in assembly := {
   case x if x.endsWith(".class") => MergeStrategy.last
