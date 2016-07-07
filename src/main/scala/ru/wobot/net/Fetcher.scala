@@ -62,6 +62,7 @@ object Fetcher {
   }
 
   def fetch(uri: String): Future[Fetch] ={
+    //println(s"---fetch | ThreadId=${Thread.currentThread().getId}")
     val id: Long = uri.substring(7).replaceAll("/", "").toLong
     fetchFriends(id)
   }
