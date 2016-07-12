@@ -37,58 +37,24 @@ object FetchJob {
     val params = ParameterTool.fromArgs(args)
     env.getConfig.setGlobalJobParameters(params)
 
-    val elements = env.fromElements(1, 2, 3)
-
     val seeds: DataStream[String] = env.addSource(new FlinkKafkaConsumer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties)).rebalance.name("FROM-CRAWL-DB")
 
-    //seeds.print()
-    //    env.execute()
-    val speedometerTime: Time = Time.seconds(10)
-    val slideTime: Time = Time.seconds(2)
-
-    //    seeds.timeWindowAll(slideTime).apply((window: TimeWindow, urls: Iterable[String], out: Collector[String]) => {
-    //      //println(s"--SPEEDOMETER | ThreadId=${Thread.currentThread().getId}")
-    //      val count: Int = urls.count(_ => true)
-    //      out.collect(s"select seeds / per 2 sec = $count")
-    //    })
-    //      .print()
-    //      .name("SPEEDOMETER-SEEDS")
-    //
-    //
-    //    val emitSeeds: DataStream[(String, Int)] = seeds
-    //      .map {
-    //        (_, 1)
-    //      }
-    //      .keyBy(0)
-    //      .timeWindow(speedometerTime, slideTime)
-    //      .sum(1)
-    //
-    //
-    //    val topN: DataStream[Seq[String]] = emitSeeds
-    //      .timeWindowAll(slideTime)
-    //      .apply((window: TimeWindow, seeds: Iterable[(String, Int)], out: Collector[Seq[String]]) =>
-    //        out.collect(seeds.toSeq.sortBy(_._2)(Ordering[Int].reverse).take(25).map(_._1))
-    //      ).name("TOP-N URLS")
-    //
-    //
-    //    val fetch: DataStream[Fetch] = topN.flatMap((urls: Seq[String], out: Collector[Fetch]) => {
-    //      //println(s"--topN.map - Start async fetch: ${System.nanoTime} | ThreadId=${Thread.currentThread().getId}")
-    //      val all = Future.sequence(urls.map(Fetcher.fetch(_)))
-    //      for (fetch <- Await.result(all, Duration.Inf)) {
-    //        out.collect(fetch)
-    //      }
-    //      //println(s"--topN.map - End async fetch: ${System.nanoTime} | ThreadId=${Thread.currentThread().getId}")
-    //    }).name("FETCH")
-
+//    seeds.timeWindowAll(Time.seconds(1)).apply((window: TimeWindow, urls: Iterable[String], out: Collector[String]) => {
+//      //println(s"--SPEEDOMETER | ThreadId=${Thread.currentThread().getId}")
+//      val count: Int = urls.count(_ => true)
+//      out.collect(s"select seeds / per sec = $count")
+//    })
+//      .print()
 
     val fetch = seeds.map(x => {
       try {
-        Await.result(Fetcher.fetch(x), Duration.create(2, TimeUnit.SECONDS))
+        Await.result(Fetcher.fetch(x), Duration.create(1, TimeUnit.SECONDS))
       }
       catch {
         case e: TimeoutException => ErrorFetch(x, e.getMessage)
       }
     })
+    //fetch.print()
 
     fetch
       .writeUsingOutputFormat(new HBaseOutputFormat[Fetch](CRAWL_TOPIC_NAME, p => new Put(Bytes.toBytes(s"${p.uri}")).add(Bytes.toBytes("id"), Bytes.toBytes("date"), Bytes.toBytes(System.nanoTime()))))
@@ -111,64 +77,47 @@ object FetchJob {
       .keyBy(1)
       .timeWindow(Time.milliseconds(5000))
       .apply((tuple: Tuple, window: TimeWindow, seeds: Iterable[(String, Int)], out: Collector[Seq[String]]) => {
-        //        val by: Seq[(String, Int)] = seeds.toSeq.sortBy(_._2)(Ordering[Int].reverse)
-        //        val toList: List[(String, Int)] = by.toList
-        //        val count: Int = toList.count(x => true)
+//        val by: Seq[(String, Int)] = seeds.toSeq.sortBy(_._2)(Ordering[Int].reverse)
+//        val toList: List[(String, Int)] = by.toList
+//        val count: Int = toList.count(x => true)
         //        val map: Seq[String] = by.take(100).map(_._1)
-        //        println(count)
-        out.collect(seeds.toSeq.sortBy(_._2)(Ordering[Int].reverse).take(25).map(_._1))
+//        val count: Int = seeds.count(_ => true)
+//        println(count)
+        out.collect(seeds.toSeq.sortBy(_._2)(Ordering[Int].reverse).take(300).map(_._1))
       })
       .setParallelism(8)
 
-    val topN: DataStream[String] = topBatch.flatMap(x => x)
+    val topN: DataStream[String] = topBatch.flatMap(x => x).rebalance
 
-    topN
-      .keyBy(x => x)
-      .timeWindowAll(Time.seconds(2))
-      .apply((window: TimeWindow, urls: Iterable[String], out: Collector[String]) =>{
-        //println(urls)
-        val count: Int = urls.count(_ => true)
-        out.collect(s"topN / per 15 sec = $count")
-      })
-      .setParallelism(8)
-      .print()
-      .name("SPEEDOMETER-topn")
+//    topN
+//      .timeWindowAll((Time.seconds(1)))
+//      .apply((window: TimeWindow, urls: Iterable[String], out: Collector[String]) => {
+//        //println(urls)
+//        val count: Int = urls.count(_ => true)
+//        out.collect(s"topN / per sec = $count")
+//      })
+//      .print()
 
 
     val unfetch: DataStream[String] = seeds
       .coGroup(topN)
       .where(x => x)
       .equalTo(x => x)
-      .window(TumblingEventTimeWindows.of(Time.milliseconds(50)))
+      .window(TumblingEventTimeWindows.of(Time.seconds(15)))
       .apply((left: Iterator[String], right: Iterator[String], out: Collector[String]) => {
+        if (left.isEmpty) {
+          right.foreach(out.collect(_))
+        }
         if (right.isEmpty) {
           left.foreach(out.collect(_))
         }
       })
+      .setParallelism(8)
+      .rebalance
 
-    unfetch.print()
+    //unfetch.print()
 
-    //
-    //
-    //
-
-    //
-    //
-
-    //
-    //    //StreamTableEnvironment tableEnv = TableEnvironment.getTableEnvironment(env);
-    //
-    //    topN.print()
-    //
-    ////    val unfetch: DataStream[String] = seeds.coGroup(topN).where(x => x).equalTo(x => x).window(TumblingEventTimeWindows.of(slideTime))
-    ////      .apply((left: Iterator[String], right: Iterator[String], out: Collector[String]) => {
-    ////        if (right.isEmpty) {
-    ////          left.foreach(out.collect(_))
-    ////        }
-    ////      })
-    //
-    //    //    topN.join(seeds).where(0).equalTo(0).window().addSink(new FlinkKafkaProducer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties))
-    //    //      .name("TO-CRAWL-DB")
+    unfetch.addSink(new FlinkKafkaProducer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties))
 
     val startTime = System.nanoTime
     env.execute()
