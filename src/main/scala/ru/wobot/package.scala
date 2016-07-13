@@ -10,6 +10,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration
 
 package object wobot {
   val CRAWL_TOPIC_NAME = "FC-CRAWL-DB"
+  val FETCHED_TOPIC_NAME = "FC-FETCHED"
 
   class HBaseOutputFormat[T](tableName: String, write: T => Put) extends OutputFormat[T] {
     private var conf: HConf = null

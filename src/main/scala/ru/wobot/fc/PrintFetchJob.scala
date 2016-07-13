@@ -23,7 +23,7 @@ import ru.wobot.net.Fetcher.{ErrorFetch, Fetch, SuccessFetch}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, TimeoutException}
 
-object PrintJob {
+object PrintFetchJob {
   def main(args: Array[String]) {
     println(s"Start FetchJob at ${DateTime.now()}:")
     val env = StreamExecutionEnvironment.getExecutionEnvironment
@@ -32,11 +32,15 @@ object PrintJob {
     val params = ParameterTool.fromArgs(args)
     env.getConfig.setGlobalJobParameters(params)
 
-    val elements = env.fromElements(1,2,3)
+    val fetch: DataStream[Fetch] = env.addSource(new FlinkKafkaConsumer09[Fetch](FETCHED_TOPIC_NAME, new TypeInformationSerializationSchema[Fetch](TypeInformation.of(classOf[Fetch]), env.getConfig), params.getProperties)).rebalance.name("FROM-CRAWL-DB")
 
-    val seeds: DataStream[String] = env.addSource(new FlinkKafkaConsumer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties)).rebalance.name("FROM-CRAWL-DB")
+    fetch.timeWindowAll(Time.seconds(1)).apply((window: TimeWindow, urls: Iterable[Fetch], out: Collector[String]) => {
+      val count: Int = urls.count(_ => true)
+      out.collect(s"fetch / per sec = $count")
+    })
+      .print()
 
-    seeds.print()
+    fetch.map(x=>x.uri).print()
     env.execute()
  }
 

@@ -90,6 +90,7 @@ object Fetcher {
   }
 
   def fetchAsync(url: String): Future[WSResponse] = {
+    //println(s"---fetch | ThreadId=${Thread.currentThread().getId}")
     ws
       .url(url)
       .get()
