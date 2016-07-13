@@ -35,9 +35,11 @@ object ParseJob {
 
     val fetch: DataStream[Fetch] = env.addSource(new FlinkKafkaConsumer09[Fetch](FETCHED_TOPIC_NAME, new TypeInformationSerializationSchema[Fetch](TypeInformation.of(classOf[Fetch]), env.getConfig), params.getProperties)).rebalance.name("FROM-FETCHED")
 
-    val outlinks: DataStream[String] = fetch
+    val successFetched: DataStream[SuccessFetch[Seq[Long]]] = fetch
       .filter(x => x.isInstanceOf[SuccessFetch[Seq[Long]]])
       .map(x => x.asInstanceOf[SuccessFetch[Seq[Long]]])
+
+    val outlinks: DataStream[String] = successFetched
       .flatMap(x => x.data)
       .map(x => s"vk://id$x")
       .rebalance
@@ -63,37 +65,37 @@ object ParseJob {
       })
 
     val topN: DataStream[String] = topBatch.flatMap(x => x).rebalance
-    topN.print()
+    //topN.print()
 
-    //    topN
-    //      .timeWindowAll((Time.seconds(1)))
-    //      .apply((window: TimeWindow, urls: Iterable[String], out: Collector[String]) => {
-    //        //println(urls)
-    //        val count: Int = urls.count(_ => true)
-    //        out.collect(s"topN / per sec = $count")
-    //      })
-    //      .print()
+    val alreadyFetched: DataStream[String] = successFetched.map(x=>x.uri)
 
+    val unfetch: DataStream[String] = alreadyFetched
+      .coGroup(topN)
+      .where(x => x)
+      .equalTo(x => x)
+      .window(TumblingEventTimeWindows.of(Time.seconds(15)))
+      //.window(ProcessingTimeSessionWindows.withGap(Time.seconds(2)))
+      .apply((left: Iterator[String], right: Iterator[String], out: Collector[String]) => {
+      if (left.isEmpty) {
+        right.foreach(out.collect(_))
+      }
+      if (right.isEmpty) {
+        left.foreach(out.collect(_))
+      }
+    })
+      //.setParallelism(8)
+      .rebalance
 
-//    val unfetch: DataStream[String] = seeds
-//      .coGroup(topN)
-//      .where(x => x)
-//      .equalTo(x => x)
-//      .window(TumblingEventTimeWindows.of(Time.seconds(15)))
-//      //.window(ProcessingTimeSessionWindows.withGap(Time.seconds(2)))
-//      .apply((left: Iterator[String], right: Iterator[String], out: Collector[String]) => {
-//      if (left.isEmpty) {
-//        right.foreach(out.collect(_))
-//      }
-//      if (right.isEmpty) {
-//        left.foreach(out.collect(_))
-//      }
-//    })
-//      .setParallelism(8)
-//      .rebalance
-//
-//
-//    unfetch.addSink(new FlinkKafkaProducer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties))
+    unfetch.addSink(new FlinkKafkaProducer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties))
+
+    unfetch
+      .timeWindowAll((Time.seconds(15)))
+      .apply((window: TimeWindow, urls: Iterable[String], out: Collector[String]) => {
+        //println(urls)
+        val count: Int = urls.count(_ => true)
+        out.collect(s"topN / per 15 sec = $count")
+      })
+      .print()
 
     val startTime = System.nanoTime
     env.execute()

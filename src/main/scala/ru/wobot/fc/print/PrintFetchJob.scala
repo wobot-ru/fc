@@ -1,27 +1,18 @@
-package ru.wobot.fc
-
-import java.util.concurrent.TimeUnit
+package ru.wobot.fc.print
 
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.java.utils.ParameterTool
 import org.apache.flink.api.scala._
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.scala.{DataStream, StreamExecutionEnvironment}
-import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer09
 import org.apache.flink.streaming.util.serialization.TypeInformationSerializationSchema
 import org.apache.flink.util.Collector
-import org.apache.hadoop.hbase.client.Put
-import org.apache.hadoop.hbase.util.Bytes
 import org.joda.time.DateTime
 import ru.wobot._
-import ru.wobot.net.Fetcher
-import ru.wobot.net.Fetcher.{ErrorFetch, Fetch, SuccessFetch}
-
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, TimeoutException}
+import ru.wobot.net.Fetcher.Fetch
 
 object PrintFetchJob {
   def main(args: Array[String]) {
