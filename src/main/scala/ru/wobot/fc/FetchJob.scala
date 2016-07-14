@@ -26,7 +26,7 @@ object FetchJob {
     println(s"Start FetchJob at ${DateTime.now()}:")
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
-    env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime)
+    env.setStreamTimeCharacteristic(TimeCharacteristic.ProcessingTime)
     env.getConfig.enableSysoutLogging()
     val params = ParameterTool.fromArgs(args)
     env.getConfig.setGlobalJobParameters(params)

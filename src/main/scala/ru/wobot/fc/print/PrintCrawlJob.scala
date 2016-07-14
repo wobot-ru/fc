@@ -25,13 +25,13 @@ object PrintCrawlJob {
 
     val seeds: DataStream[String] = env.addSource(new FlinkKafkaConsumer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties)).rebalance.name("FROM-CRAWL-DB")
 
-    seeds.timeWindowAll(Time.seconds(5)).apply((window: TimeWindow, urls: Iterable[String], out: Collector[String]) => {
-      val count: Int = urls.count(_ => true)
-      out.collect(s"select seeds / per 5 sec = $count")
-    })
-      .print()
+//    seeds.timeWindowAll(Time.seconds(5)).apply((window: TimeWindow, urls: Iterable[String], out: Collector[String]) => {
+//      val count: Int = urls.count(_ => true)
+//      out.collect(s"select seeds / per 5 sec = $count")
+//    })
+//      .print()
 
-    //seeds.print()
+    seeds.print()
     env.execute()
  }
 
