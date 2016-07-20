@@ -11,11 +11,13 @@ import org.apache.flink.streaming.api.windowing.windows.GlobalWindow
 import org.apache.flink.streaming.connectors.kafka.{FlinkKafkaConsumer09, FlinkKafkaProducer09}
 import org.apache.flink.streaming.util.serialization.TypeInformationSerializationSchema
 import org.apache.flink.util.Collector
+import org.apache.hadoop.hbase.client.Put
+import org.apache.hadoop.hbase.util.Bytes
 import org.joda.time.DateTime
 import ru.wobot._
 import ru.wobot.fc.util.ThroughputLogger
 import ru.wobot.net.Fetcher
-import ru.wobot.net.Fetcher.{ErrorFetch, Fetch}
+import ru.wobot.net.Fetcher.{ErrorFetch, Fetch, SuccessFetch}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
@@ -31,17 +33,17 @@ object FetchJob {
     val params = ParameterTool.fromArgs(args)
     env.getConfig.setGlobalJobParameters(params)
 
-    val seeds: DataStream[String] = env.addSource(new FlinkKafkaConsumer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties)).rebalance.name("FROM-CRAWL-DB")
+    val seeds: DataStream[String] = env.addSource(new FlinkKafkaConsumer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties)).keyBy(x => x)
 
-//    val toFetch: DataStream[Seq[String]] = seeds.keyBy(x => x).timeWindow(Time.seconds(1)).apply((s: String, window: TimeWindow, urls: Iterable[String], out: Collector[Seq[String]]) => {
-//      urls.grouped(20).foreach(x => out.collect(x.toSeq))
-//    })
+    //    val toFetch: DataStream[Seq[String]] = seeds.keyBy(x => x).timeWindow(Time.seconds(1)).apply((s: String, window: TimeWindow, urls: Iterable[String], out: Collector[Seq[String]]) => {
+    //      urls.grouped(20).foreach(x => out.collect(x.toSeq))
+    //    })
 
-//    val toFetch: DataStream[Seq[String]] = seeds.keyBy(x => x.hashCode).countWindow(9).apply((hash: Int, window: GlobalWindow, urls: Iterable[String], out: Collector[Seq[String]]) => {
-//      out.collect(urls.toSeq)
-//    })
+    //    val toFetch: DataStream[Seq[String]] = seeds.keyBy(x => x.hashCode).countWindow(9).apply((hash: Int, window: GlobalWindow, urls: Iterable[String], out: Collector[Seq[String]]) => {
+    //      out.collect(urls.toSeq)
+    //    })
 
-    val toFetch: DataStream[Seq[String]] = seeds.countWindowAll(10).apply((window: GlobalWindow, urls: Iterable[String], out: Collector[Seq[String]]) =>{
+    val toFetch: DataStream[Seq[String]] = seeds.countWindowAll(20).apply((window: GlobalWindow, urls: Iterable[String], out: Collector[Seq[String]]) => {
       out.collect(urls.toSeq)
     })
 
@@ -62,17 +64,21 @@ object FetchJob {
       .flatMap((urls: Seq[String], out: Collector[Fetch]) => {
         try {
           val all = Future.sequence(urls.map(Fetcher.fetch(_)))
-          Await.result(all, Duration.create(1, TimeUnit.SECONDS)).foreach(x=>out.collect(x))
+          Await.result(all, Duration.create(1, TimeUnit.SECONDS)).foreach(out.collect(_))
         }
         catch {
           case e: TimeoutException => urls.foreach(x => out.collect(ErrorFetch(x, e.getMessage)))
         }
       })
+      .rebalance
       .name("FETCH")
 
-    fetch.flatMap(new ThroughputLogger[Fetch](200, 250))
+    fetch.flatMap(new ThroughputLogger[Fetch](200, 5000))
 
     fetch.addSink(new FlinkKafkaProducer09[Fetch](FETCHED_TOPIC_NAME, new TypeInformationSerializationSchema[Fetch](TypeInformation.of(classOf[Fetch]), env.getConfig), params.getProperties))
+    fetch.writeUsingOutputFormat(new HBaseOutputFormat[Fetch](FETCHED_TOPIC_NAME, x =>
+      new Put(Bytes.toBytes(x.uri)).add(Bytes.toBytes("id"), Bytes.toBytes("uri"), Bytes.toBytes(x.uri))))
+
     val startTime = System.nanoTime
     env.execute()
     val elapsedTime = TimeUnit.MILLISECONDS.convert(System.nanoTime - startTime, TimeUnit.NANOSECONDS)
