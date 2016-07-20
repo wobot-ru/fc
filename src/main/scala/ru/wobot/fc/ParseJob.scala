@@ -2,6 +2,8 @@ package ru.wobot.fc
 
 import java.util.concurrent.TimeUnit
 
+import com.redis.RedisClientPool
+import org.apache.flink.api.common.functions.FlatMapFunction
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.api.java.utils.ParameterTool
@@ -26,6 +28,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future, TimeoutException}
 import scala.util.Random
+import com.redis.serialization.Parse.Implicits.parseLong
 
 object ParseJob {
   def main(args: Array[String]) {
@@ -43,8 +46,8 @@ object ParseJob {
       .filter(_.isInstanceOf[SuccessFetch[Seq[Long]]])
       .map(x => x.asInstanceOf[SuccessFetch[Seq[Long]]])
 
-//    successFetched.writeUsingOutputFormat(new HBaseOutputFormat[SuccessFetch[Seq[Long]]](FETCHED_TOPIC_NAME, x =>
-//      new Put(Bytes.toBytes(x.uri)).add(Bytes.toBytes("id"), Bytes.toBytes("uri"), Bytes.toBytes(x.uri))))
+    //    successFetched.writeUsingOutputFormat(new HBaseOutputFormat[SuccessFetch[Seq[Long]]](FETCHED_TOPIC_NAME, x =>
+    //      new Put(Bytes.toBytes(x.uri)).add(Bytes.toBytes("id"), Bytes.toBytes("uri"), Bytes.toBytes(x.uri))))
 
     val outlinks: DataStream[String] = successFetched
       .flatMap(x => x.data)
@@ -52,26 +55,24 @@ object ParseJob {
       .name("OUTLINKS")
 
 
-    //topN.flatMap(new ThroughputLogger[String](32, 250))
+    val unfetch = outlinks.flatMap(new FlatMapFunction[String, String]() {
+      override def flatMap(t: String, collector: Collector[String]): Unit = {
+        RedisConnection.conn.withClient(x => {
+          val res: Option[Long] = x.get[Long](t)
+          if (res.isEmpty)
+            collector.collect(t)
 
-    val alreadyFetched: DataStream[String] = fetch.map(x => x.uri)
-    val slideTime: Time = Time.seconds(10)
-    val unfetch: DataStream[String] = alreadyFetched
-      .coGroup(outlinks)
-      .where(x => x)
-      .equalTo(x => x)
-      .window(SlidingProcessingTimeWindows.of(Time.days(30), slideTime))
-      //.window(ProcessingTimeSessionWindows.withGap(Time.seconds(2)))
-      .apply((left: Iterator[String], right: Iterator[String], out: Collector[String]) => {
-      if (left.isEmpty) {
-        right.foreach(out.collect(_))
-      }
-      else if (right.isEmpty) {
-        left.foreach(out.collect(_))
+          //          val crawlDate: Future[Option[Long]] = Future {
+          //            x.get[Long](t)
+          //          }
+          //          val i = Await.result(crawlDate, Duration.create(1, TimeUnit.SECONDS))
+          //          if (i.isEmpty)
+          //            collector.collect(t)
+        })
       }
     }).rebalance
 
-    //unfetch.flatMap(new ThroughputLogger[String](32, 100000))
+
     unfetch.addSink(new FlinkKafkaProducer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties))
     //    val topBatch = unfetch
     //      .map((_, 1))
@@ -96,22 +97,18 @@ object ParseJob {
     //    //topN.print()
     //    //
     //    topN.addSink(new FlinkKafkaProducer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties))
-    //
-    //    unfetch
-    //      .timeWindowAll((Time.seconds(15)))
-    //      .apply((window: TimeWindow, urls: Iterable[String], out: Collector[String]) => {
-    //        //println(urls)
-    //        val count: Int = urls.count(_ => true)
-    //        out.collect(s"topN / per 15 sec = $count")
-    //      })
-    //      .print()
 
     val startTime = System.nanoTime
     env.execute()
     val elapsedTime = TimeUnit.MILLISECONDS.convert(System.nanoTime - startTime, TimeUnit.NANOSECONDS)
     Fetcher.close()
+    RedisConnection.conn.close
     Thread.sleep(1000)
     println(s"FetchJob.ElapsedTime=$elapsedTime ms")
+  }
+
+  object RedisConnection extends Serializable {
+    lazy val conn: RedisClientPool = new RedisClientPool("localhost", 6379)
   }
 
 }

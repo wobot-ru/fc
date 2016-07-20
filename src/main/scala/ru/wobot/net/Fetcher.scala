@@ -13,10 +13,19 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.io.Source
 
-/**
-  * Created by kviz on 7/5/2016.
-  */
 object Fetcher {
+
+  trait Fetch {
+    def uri: String
+
+    def crawlDate: Long
+  }
+
+  case class SuccessFetch[T](uri: String, crawlDate: Long, data: T) extends Fetch
+
+  case class ErrorFetch[T](uri: String, crawlDate: Long, msg: String) extends Fetch
+
+
   implicit val system = ActorSystem()
   implicit val materializer = ActorMaterializer()
   val environment = Environment(new File("."), this.getClass.getClassLoader, Mode.Prod)
@@ -61,7 +70,7 @@ object Fetcher {
     system.terminate()
   }
 
-  def fetch(uri: String): Future[Fetch] ={
+  def fetch(uri: String): Future[Fetch] = {
     //println(s"---fetch | ThreadId=${Thread.currentThread().getId}")
     val id: Long = uri.substring(7).replaceAll("/", "").toLong
     fetchFriends(id)
@@ -77,15 +86,15 @@ object Fetcher {
       x.status match {
         case Status.OK => {
           (x.json \ "error").asOpt[JsValue] match {
-            case Some(_) => ErrorFetch(url, x.json.toString())
-            case _ => SuccessFetch[Seq[Long]](url, (x.json \ "response").as[Seq[Long]])
+            case Some(_) => ErrorFetch(url, System.nanoTime, x.json.toString())
+            case _ => SuccessFetch[Seq[Long]](url, System.nanoTime, (x.json \ "response").as[Seq[Long]])
           }
         }
-        case _ => ErrorFetch(api, x.statusText)
+        case _ => ErrorFetch(api, System.nanoTime, x.statusText)
       }
 
     }).recover {
-      case t: Throwable => ErrorFetch(api, t.toString)
+      case t: Throwable => ErrorFetch(api, System.nanoTime, t.toString)
     }
   }
 
@@ -96,11 +105,4 @@ object Fetcher {
       .get()
   }
 
-  trait Fetch {
-    def uri: String
-  }
-
-  case class SuccessFetch[T](uri: String, data: T) extends Fetch
-
-  case class ErrorFetch[T](uri: String, msg: String) extends Fetch
 }

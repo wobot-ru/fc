@@ -5,12 +5,11 @@ import org.apache.flink.api.java.utils.ParameterTool
 import org.apache.flink.api.scala._
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.scala.{DataStream, StreamExecutionEnvironment}
-import org.apache.flink.streaming.api.windowing.time.Time
-import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer09
 import org.apache.flink.streaming.util.serialization.TypeInformationSerializationSchema
-import org.apache.flink.util.Collector
 import org.joda.time.DateTime
+import org.apache.flink.util.Collector
+import org.apache.flink.api.common.functions.RichFlatMapFunction
 import ru.wobot._
 
 object PrintCrawlJob {
@@ -31,7 +30,14 @@ object PrintCrawlJob {
 //    })
 //      .print()
 
-    seeds.print()
+
+    var s=seeds.flatMap(new RichFlatMapFunction[String, Int](){
+      override def flatMap(t: String, collector: Collector[Int]): Unit = {
+        collector.collect(1)
+      }
+    })
+
+    s.print()
     env.execute()
  }
 

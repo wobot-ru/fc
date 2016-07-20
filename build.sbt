@@ -27,6 +27,7 @@ val flinkDependencies = Seq(
   "org.apache.flink" %% "flink-connector-kafka-0.9" % flinkVersion,
   "org.apache.flink" %% "flink-table" % flinkVersion,
   "org.apache.hbase" % "hbase-common" % "0.98.11-hadoop2",
+  "net.debasishg" %% "redisclient" % "3.0",
   "com.typesafe.play" %% "play-ws" % "2.5.4")
 
 lazy val root = (project in file(".")).
