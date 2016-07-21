@@ -14,6 +14,7 @@ import org.apache.flink.streaming.connectors.kafka.{FlinkKafkaConsumer09, FlinkK
 import org.apache.flink.streaming.util.serialization.TypeInformationSerializationSchema
 import org.apache.flink.util.Collector
 import org.joda.time.DateTime
+import org.slf4j.LoggerFactory
 import ru.wobot.Config.SIZE_OF_RADIS_BATCH
 import ru.wobot._
 import ru.wobot.net.Fetcher.{ErrorFetch, Fetch, SuccessFetch}
@@ -24,11 +25,14 @@ import scala.concurrent.duration.Duration
 import scala.concurrent._
 
 object ParseJob {
+  private val LOGGER = LoggerFactory.getLogger(ParseJob.getClass)
+
   def main(args: Array[String]) {
     println(s"Start FetchJob at ${DateTime.now()}:")
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.ProcessingTime)
     env.getConfig.enableSysoutLogging()
+    env.disableOperatorChaining()
     val params = ParameterTool.fromArgs(args)
     env.getConfig.setGlobalJobParameters(params)
 
@@ -49,26 +53,26 @@ object ParseJob {
 
     val unfetch: DataStream[String] = outlinksBatch.flatMap(new FlatMapFunction[Seq[String], String]() {
       override def flatMap(urls: Seq[String], collector: Collector[String]): Unit = {
-        RedisConnection.conn.withClient(x => {
+        try {
+          RedisConnection.conn.withClient(x => {
 
-          val future: Future[Seq[Option[Long]]] = Future.sequence(urls.map(u => Future {
-            x.get[Long](urls)
-          }))
+            val future  = Future.sequence(urls.map(u => Future {
+              (u, x.get[Long](u))
+            }))
 
-          try {
-            val res: Seq[Option[Long]] = Await.result[Seq[Option[Long]]](future, Duration.create(1, TimeUnit.SECONDS))
-            res.filter(_.isEmpty)
+            val res: Seq[(String, Option[Long])] = Await.result[Seq[(String, Option[Long])]](future, Duration.create(5, TimeUnit.SECONDS))
+            res
+              .filter(_._2.isEmpty)
+              .map(x => x._1)
+              .foreach(collector.collect(_))
+          })
+        }
+        catch {
+          case e: Throwable => {
+            LOGGER.error("Raddis error", e)
+            urls.foreach(collector.collect(_))
           }
-          catch {
-            case e: TimeoutException => urls.foreach(collector.collect(_))
-          }
-          //          val crawlDate: Future[Option[Long]] = Future {
-          //            x.get[Long](urls)
-          //          }
-          //          val i = Await.result(crawlDate, Duration.create(1, TimeUnit.SECONDS))
-          //          if (i.isEmpty)
-          //            collector.collect(urls)
-        })
+        }
       }
     }).rebalance
 
@@ -107,4 +111,3 @@ object ParseJob {
     Fetcher.close()
     RedisConnection.conn.close
   }
-}
