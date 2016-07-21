@@ -3,32 +3,20 @@ package ru.wobot.fc
 import java.util.concurrent.TimeUnit
 
 import com.redis.RedisClientPool
+import com.redis.serialization.Parse.Implicits.parseLong
 import org.apache.flink.api.common.functions.FlatMapFunction
 import org.apache.flink.api.common.typeinfo.TypeInformation
-import org.apache.flink.api.java.tuple.Tuple
 import org.apache.flink.api.java.utils.ParameterTool
 import org.apache.flink.api.scala._
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.scala.{DataStream, StreamExecutionEnvironment}
-import org.apache.flink.streaming.api.windowing.assigners.{SlidingProcessingTimeWindows, TumblingEventTimeWindows, TumblingProcessingTimeWindows}
-import org.apache.flink.streaming.api.windowing.time.Time
-import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.streaming.connectors.kafka.{FlinkKafkaConsumer09, FlinkKafkaProducer09}
 import org.apache.flink.streaming.util.serialization.TypeInformationSerializationSchema
 import org.apache.flink.util.Collector
-import org.apache.hadoop.hbase.client.Put
-import org.apache.hadoop.hbase.util.Bytes
 import org.joda.time.DateTime
 import ru.wobot._
-import ru.wobot.fc.util.ThroughputLogger
 import ru.wobot.net.Fetcher
 import ru.wobot.net.Fetcher.{Fetch, SuccessFetch}
-
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future, TimeoutException}
-import scala.util.Random
-import com.redis.serialization.Parse.Implicits.parseLong
 
 object ParseJob {
   def main(args: Array[String]) {
@@ -41,16 +29,16 @@ object ParseJob {
 
     val fetch: DataStream[Fetch] = env.addSource(new FlinkKafkaConsumer09[Fetch](FETCHED_TOPIC_NAME, new TypeInformationSerializationSchema[Fetch](TypeInformation.of(classOf[Fetch]), env.getConfig), params.getProperties)).keyBy(x => x.uri)
 
-    val successFetched: DataStream[SuccessFetch[Seq[Long]]] = fetch
-      .filter(x => x.isInstanceOf[SuccessFetch[Seq[Long]]])
-      .filter(_.isInstanceOf[SuccessFetch[Seq[Long]]])
-      .map(x => x.asInstanceOf[SuccessFetch[Seq[Long]]])
+    val successFetched = fetch
+      .filter(x => x.isInstanceOf[SuccessFetch[Profile]])
+      .filter(_.isInstanceOf[SuccessFetch[Profile]])
+      .map(x => x.asInstanceOf[SuccessFetch[Profile]])
 
     //    successFetched.writeUsingOutputFormat(new HBaseOutputFormat[SuccessFetch[Seq[Long]]](FETCHED_TOPIC_NAME, x =>
     //      new Put(Bytes.toBytes(x.uri)).add(Bytes.toBytes("id"), Bytes.toBytes("uri"), Bytes.toBytes(x.uri))))
 
     val outlinks: DataStream[String] = successFetched
-      .flatMap(x => x.data)
+      .flatMap(x => x.data.friends)
       .map(x => s"vk://id$x")
       .name("OUTLINKS")
 

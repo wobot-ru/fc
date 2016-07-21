@@ -1,6 +1,7 @@
 package ru.wobot.net
 
-import java.io.File
+import java.io.{File, IOException}
+import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
@@ -8,9 +9,11 @@ import play.api.http.Status
 import play.api.libs.json.JsValue
 import play.api.libs.ws.WSResponse
 import play.api.{Environment, Mode}
+import ru.wobot.Profile
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
 import scala.io.Source
 
 object Fetcher {
@@ -25,11 +28,9 @@ object Fetcher {
 
   case class ErrorFetch[T](uri: String, crawlDate: Long, msg: String) extends Fetch
 
-
   implicit val system = ActorSystem()
   implicit val materializer = ActorMaterializer()
   val environment = Environment(new File("."), this.getClass.getClassLoader, Mode.Prod)
-
 
   lazy val ws = {
     import com.typesafe.config.ConfigFactory
@@ -73,10 +74,24 @@ object Fetcher {
   def fetch(uri: String): Future[Fetch] = {
     //println(s"---fetch | ThreadId=${Thread.currentThread().getId}")
     val id: Long = uri.substring(7).replaceAll("/", "").toLong
-    fetchFriends(id)
+    val profile = fetchProfile(id)
+    val friends = fetchFriends(id)
+
+    val agg = for {
+      p <- profile
+      f <- friends
+    } yield {
+      val name: String = (p \ "first_name").as[String]
+      val lastName: String = (p \ "last_name").as[String]
+      SuccessFetch(uri, System.nanoTime(), new Profile(id, s"$name $lastName", f, p))
+    }
+
+    agg.recover {
+      case t: Throwable => ErrorFetch(uri, System.nanoTime, t.toString)
+    }
   }
 
-  def fetchFriends(id: Long): Future[Fetch] = {
+  def fetchFriends(id: Long): Future[Seq[Long]] = {
     val api: String = s"http://api.vk.com/method/friends.get?user_id=$id"
     val url: String = s"vk://id$id"
     //val async: Future[WSResponse] = fetchAsync(id)
@@ -86,16 +101,32 @@ object Fetcher {
       x.status match {
         case Status.OK => {
           (x.json \ "error").asOpt[JsValue] match {
-            case Some(_) => ErrorFetch(url, System.nanoTime, x.json.toString())
-            case _ => SuccessFetch[Seq[Long]](url, System.nanoTime, (x.json \ "response").as[Seq[Long]])
+            case Some(x) => throw new IOException(x.toString())
+            case _ => (x.json \ "response").as[Seq[Long]]
           }
         }
-        case _ => ErrorFetch(api, System.nanoTime, x.statusText)
+        case _ => throw new IOException(s"Unexpected status ${x.status} ${x.statusText}")
       }
+    })
+  }
 
-    }).recover {
-      case t: Throwable => ErrorFetch(api, System.nanoTime, t.toString)
-    }
+  def fetchProfile(id: Long): Future[JsValue] = {
+    val api: String = s"http://api.vk.com/method/users.get?user_ids=$id&fields=sex,bdate,city,country,photo_50,photo_100,photo_200_orig,photo_200,photo_400_orig,photo_max,photo_max_orig,photo_id,online,online_mobile,domain,has_mobile,contacts,connections,site,education,universities,schools,can_post,can_see_all_posts,can_see_audio,can_write_private_message,status,last_seen,relation,relatives,counters,screen_name,maiden_name,timezone,occupation,activities,interests,music,movies,tv,books,games,about,quotes,personal,friend_status,military,career"
+    val url: String = s"vk://id$id"
+    //val async: Future[WSResponse] = fetchAsync(id)
+
+    //async.flatMap(x=>Future.successful(x.body))
+    fetchAsync(api).map(x => {
+      x.status match {
+        case Status.OK => {
+          (x.json \ "error").asOpt[JsValue] match {
+            case Some(x) => throw new IOException(x.toString())
+            case _ => (x.json \ "response") (0).get
+          }
+        }
+        case _ => throw new IOException(s"Unexpected status ${x.status} ${x.statusText}")
+      }
+    })
   }
 
   def fetchAsync(url: String): Future[WSResponse] = {

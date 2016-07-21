@@ -3,7 +3,6 @@ package ru.wobot.fc
 import java.util.concurrent.TimeUnit
 
 import com.redis.RedisClientPool
-import org.apache.flink.api.common.functions.FlatMapFunction
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.java.utils.ParameterTool
 import org.apache.flink.api.scala._
@@ -13,13 +12,11 @@ import org.apache.flink.streaming.api.windowing.windows.GlobalWindow
 import org.apache.flink.streaming.connectors.kafka.{FlinkKafkaConsumer09, FlinkKafkaProducer09}
 import org.apache.flink.streaming.util.serialization.TypeInformationSerializationSchema
 import org.apache.flink.util.Collector
-import org.apache.hadoop.hbase.client.Put
-import org.apache.hadoop.hbase.util.Bytes
 import org.joda.time.DateTime
 import ru.wobot._
 import ru.wobot.fc.util.ThroughputLogger
 import ru.wobot.net.Fetcher
-import ru.wobot.net.Fetcher.{ErrorFetch, Fetch, SuccessFetch}
+import ru.wobot.net.Fetcher.{ErrorFetch, Fetch}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration

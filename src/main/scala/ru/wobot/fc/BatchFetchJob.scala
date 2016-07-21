@@ -25,13 +25,14 @@ object BatchFetchJob {
     //val seeds = userIds.map(x => Fetcher.fetchFriends(x))
 
     val result = userIds.countWindowAll(20).apply((window: GlobalWindow, ids: Iterable[Long], out: Collector[Fetch]) => {
-      val all: Future[Seq[Fetch]] = Future.sequence(ids.toSeq.map(id => Fetcher.fetchFriends(id)))
+      val all = Future.sequence(ids.toSeq.map(id => Fetcher.fetch(s"vk://id$id")))
 
-      for (fetch <- Await.result(all, 6000.milliseconds)) {
+      for (fetch <- Await.result(all, Duration.Inf)) {
         out.collect(fetch)
       }
     })
 
+    result.print()
     //    val seeds = userIds.map(x => Fetcher.fetchFriends(x))
     //    val result: DataStream[String] = seeds.countWindowAll(1).apply((window: GlobalWindow, futures: Iterable[Future[Fetch]], out: Collector[String]) => {
     //      for (f<-futures){
@@ -40,7 +41,7 @@ object BatchFetchJob {
     //      }
     //    })
 
-    result.writeAsText("file:///c:\\tmp\\result.txt", WriteMode.OVERWRITE)
+    //result.writeAsText("file:///c:\\tmp\\result.txt", WriteMode.OVERWRITE)
     //result.print()
     val startTime = System.nanoTime
     env.execute()
