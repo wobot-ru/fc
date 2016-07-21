@@ -13,9 +13,9 @@ organization := "ru.wobot"
 
 scalaVersion in ThisBuild := "2.11.7"
 
-//autoScalaLibrary := true
-//
-//ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) }
+autoScalaLibrary := true
+
+ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) }
 
 
 val flinkVersion = "1.1-SNAPSHOT"

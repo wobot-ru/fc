@@ -28,6 +28,7 @@ object FetchJob {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.ProcessingTime)
     env.getConfig.enableSysoutLogging()
+    env.disableOperatorChaining()
     val params = ParameterTool.fromArgs(args)
     env.getConfig.setGlobalJobParameters(params)
 
