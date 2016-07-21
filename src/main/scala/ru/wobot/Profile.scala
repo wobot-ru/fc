@@ -6,5 +6,5 @@ class Profile(val id: Long,
               val name: String,
               val friends: Seq[Long],
               val json: JsValue) {
-  override def toString: String = s"$id $name $friends $json"
+  override def toString: String = s"$name http://vk.com/id$id $friends $json"
 }

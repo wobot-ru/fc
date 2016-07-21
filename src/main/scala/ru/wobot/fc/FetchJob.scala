@@ -2,7 +2,6 @@ package ru.wobot.fc
 
 import java.util.concurrent.TimeUnit
 
-import com.redis.RedisClientPool
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.java.utils.ParameterTool
 import org.apache.flink.api.scala._
@@ -15,8 +14,8 @@ import org.apache.flink.util.Collector
 import org.joda.time.DateTime
 import ru.wobot._
 import ru.wobot.fc.util.ThroughputLogger
-import ru.wobot.net.Fetcher
 import ru.wobot.net.Fetcher.{ErrorFetch, Fetch}
+import ru.wobot.net.{Fetcher, RedisConnection}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
@@ -60,23 +59,16 @@ object FetchJob {
 
     fetch.flatMap(new ThroughputLogger[Fetch](200, 50000))
 
-    fetch.print()
-
     fetch.addSink(new FlinkKafkaProducer09[Fetch](FETCHED_TOPIC_NAME, new TypeInformationSerializationSchema[Fetch](TypeInformation.of(classOf[Fetch]), env.getConfig), params.getProperties))
     //    fetch.writeUsingOutputFormat(new HBaseOutputFormat[Fetch](FETCHED_TOPIC_NAME, x =>
     //      new Put(Bytes.toBytes(x.uri)).add(Bytes.toBytes("id"), Bytes.toBytes("uri"), Bytes.toBytes(x.uri))))
 
     val startTime = System.nanoTime
-    env.execute()
+    env.execute("fetch")
     val elapsedTime = TimeUnit.MILLISECONDS.convert(System.nanoTime - startTime, TimeUnit.NANOSECONDS)
-    Fetcher.close()
-    RedisConnection.conn.close
     println(s"FetchJob.ElapsedTime=$elapsedTime ms")
     Thread.sleep(1000)
+    Fetcher.close()
+    RedisConnection.conn.close
   }
-
-  object RedisConnection extends Serializable {
-    lazy val conn: RedisClientPool = new RedisClientPool("localhost", 6379)
-  }
-
 }

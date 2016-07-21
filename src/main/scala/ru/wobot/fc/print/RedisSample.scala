@@ -2,7 +2,6 @@ package ru.wobot.fc.print
 
 import java.util.concurrent.TimeUnit
 
-import com.redis.RedisClientPool
 import com.redis.serialization.Parse.Implicits._
 import org.apache.flink.api.common.functions.FlatMapFunction
 import org.apache.flink.api.common.typeinfo.TypeInformation
@@ -15,6 +14,7 @@ import org.apache.flink.streaming.util.serialization.TypeInformationSerializatio
 import org.apache.flink.util.Collector
 import org.joda.time.DateTime
 import ru.wobot._
+import ru.wobot.net.RedisConnection
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
@@ -60,9 +60,4 @@ object RedisSample {
     env.execute()
     RedisConnection.conn.close
   }
-
-  object RedisConnection extends Serializable {
-    lazy val conn: RedisClientPool = new RedisClientPool("localhost", 6379)
-  }
-
 }
