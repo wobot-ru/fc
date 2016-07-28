@@ -27,14 +27,14 @@ object FetchJob {
 
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.ProcessingTime)
-    env.getConfig.enableSysoutLogging()
-    env.disableOperatorChaining()
+//    env.getConfig.enableSysoutLogging()
+//    env.disableOperatorChaining()
     val params = ParameterTool.fromArgs(args)
     env.getConfig.setGlobalJobParameters(params)
 
     val seeds: DataStream[String] = env.addSource(new FlinkKafkaConsumer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties)).keyBy(x => x)
 
-    val toFetch: DataStream[Seq[String]] = seeds.countWindowAll(20).apply((window: GlobalWindow, urls: Iterable[String], out: Collector[Seq[String]]) => {
+    val toFetch: DataStream[Seq[String]] = seeds.countWindowAll(30).apply((window: GlobalWindow, urls: Iterable[String], out: Collector[Seq[String]]) => {
       out.collect(urls.toSeq)
     })
 

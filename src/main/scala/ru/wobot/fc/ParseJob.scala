@@ -9,19 +9,15 @@ import org.apache.flink.api.java.utils.ParameterTool
 import org.apache.flink.api.scala._
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.scala.{DataStream, StreamExecutionEnvironment}
-import org.apache.flink.streaming.api.windowing.windows.GlobalWindow
 import org.apache.flink.streaming.connectors.kafka.{FlinkKafkaConsumer09, FlinkKafkaProducer09}
 import org.apache.flink.streaming.util.serialization.TypeInformationSerializationSchema
 import org.apache.flink.util.Collector
 import org.joda.time.DateTime
 import org.slf4j.LoggerFactory
-import ru.wobot.Config.SIZE_OF_RADIS_BATCH
 import ru.wobot._
-import ru.wobot.net.Fetcher.{ErrorFetch, Fetch, SuccessFetch}
+import ru.wobot.net.Fetcher.{Fetch, SuccessFetch}
 import ru.wobot.net.{Fetcher, RedisConnection}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.Duration
 import scala.concurrent._
 
 object ParseJob {
@@ -32,7 +28,7 @@ object ParseJob {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.ProcessingTime)
     env.getConfig.enableSysoutLogging()
-    env.disableOperatorChaining()
+    //env.disableOperatorChaining()
     val params = ParameterTool.fromArgs(args)
     env.getConfig.setGlobalJobParameters(params)
 
@@ -45,36 +41,54 @@ object ParseJob {
       })
       .flatMap(_.friends)
       .map(x => s"vk://id$x")
+      .rebalance
       .name("OUTLINKS")
 
-    val outlinksBatch = outlinks.countWindowAll(SIZE_OF_RADIS_BATCH).apply((window: GlobalWindow, urls: Iterable[String], out: Collector[Seq[String]]) => {
-      out.collect(urls.toSeq)
-    })
+    //    val outlinksBatch = outlinks.countWindowAll(SIZE_OF_RADIS_BATCH).apply((window: GlobalWindow, urls: Iterable[String], out: Collector[Seq[String]]) => {
+    //      out.collect(urls.toSeq)
+    //    })
 
-    val unfetch: DataStream[String] = outlinksBatch.flatMap(new FlatMapFunction[Seq[String], String]() {
-      override def flatMap(urls: Seq[String], collector: Collector[String]): Unit = {
+    val unfetch: DataStream[String] = outlinks.flatMap(new FlatMapFunction[String, String]() {
+      override def flatMap(url: String, collector: Collector[String]): Unit = {
         try {
           RedisConnection.conn.withClient(x => {
-
-            val future  = Future.sequence(urls.map(u => Future {
-              (u, x.get[Long](u))
-            }))
-
-            val res: Seq[(String, Option[Long])] = Await.result[Seq[(String, Option[Long])]](future, Duration.create(5, TimeUnit.SECONDS))
-            res
-              .filter(_._2.isEmpty)
-              .map(x => x._1)
-              .foreach(collector.collect(_))
+            if (x.get[Long](url).isEmpty) collector.collect(url)
           })
         }
         catch {
-          case e: Throwable => {
+          case e: TimeoutException => {
             LOGGER.error("Raddis error", e)
-            urls.foreach(collector.collect(_))
+            collector.collect(url)
           }
         }
       }
-    }).rebalance
+    })
+
+
+    //    val unfetch: DataStream[String] = outlinksBatch.flatMap(new FlatMapFunction[Seq[String], String]() {
+    //      override def flatMap(urls: Seq[String], collector: Collector[String]): Unit = {
+    //        try {
+    //          RedisConnection.conn.withClient(x => {
+    //
+    //            val future = Future.sequence(urls.map(u => Future {
+    //              (u, x.get[Long](u))
+    //            }))
+    //
+    //            val res: Seq[(String, Option[Long])] = Await.result[Seq[(String, Option[Long])]](future, Duration.create(5, TimeUnit.SECONDS))
+    //            res
+    //              .filter(_._2.isEmpty)
+    //              .map(x => x._1)
+    //              .foreach(collector.collect(_))
+    //          })
+    //        }
+    //        catch {
+    //          case e: Throwable => {
+    //            LOGGER.error("Raddis error", e)
+    //            urls.foreach(collector.collect(_))
+    //          }
+    //        }
+    //      }
+    //    }).rebalance
 
 
     unfetch.addSink(new FlinkKafkaProducer09[String](CRAWL_TOPIC_NAME, new TypeInformationSerializationSchema[String](TypeInformation.of(classOf[String]), env.getConfig), params.getProperties))
@@ -111,3 +125,4 @@ object ParseJob {
     Fetcher.close()
     RedisConnection.conn.close
   }
+}
