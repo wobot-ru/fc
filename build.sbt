@@ -1,6 +1,8 @@
 //overrideBuildResolvers := true
 //
 resolvers in ThisBuild ++= Seq("Apache Development Snapshot Repository" at "https://repository.apache.org/content/repositories/snapshots/")
+//resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
+
 //resolvers in ThisBuild ++= Seq(Resolver.mavenLocal, "Apache Development Snapshot Repository" at "https://repository.apache.org/content/repositories/snapshots/")
 //resolvers in ThisBuild ++= Seq("Local Maven Repository" at "file://"+Path.userHome+"/.m2/repository")
 //resolvers in ThisBuild ++= Seq(Resolver.mavenLocal)
@@ -28,6 +30,8 @@ val flinkDependencies = Seq(
   "org.apache.flink" %% "flink-table" % flinkVersion,
   "org.apache.hbase" % "hbase-common" % "0.98.11-hadoop2",
   "net.debasishg" %% "redisclient" % "3.0",
+  //"wabisabi" %% "wabisabi" % "2.1.6",
+  "com.sksamuel.elastic4s" % "elastic4s-core_2.11" % "2.3.1",
   "com.typesafe.play" %% "play-ws" % "2.5.4")
 
 lazy val root = (project in file(".")).
