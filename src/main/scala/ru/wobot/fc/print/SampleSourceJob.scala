@@ -3,9 +3,9 @@ package ru.wobot.fc.print
 import org.apache.flink.api.java.utils.ParameterTool
 import org.apache.flink.api.scala._
 import org.apache.flink.streaming.api.TimeCharacteristic
-import org.apache.flink.streaming.api.scala.{DataStream, StreamExecutionEnvironment}
+import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
 import org.joda.time.DateTime
-import ru.wobot.fc.StringGeneratingSourceFunction
+import ru.wobot.fc.EsSearch
 
 object SampleSourceJob {
   def main(args: Array[String]) {
@@ -17,7 +17,7 @@ object SampleSourceJob {
     env.getConfig.setGlobalJobParameters(params)
 
 
-    val stream: DataStream[String] = env.addSource(new StringGeneratingSourceFunction(80)).startNewChain
+    val stream = env.addSource(new EsSearch("мтс")).startNewChain
 
 //    seeds.timeWindowAll(Time.seconds(5)).apply((window: TimeWindow, urls: Iterable[String], out: Collector[String]) => {
 //      val count: Int = urls.count(_ => true)
@@ -26,7 +26,7 @@ object SampleSourceJob {
 //      .print()
 
 
-    stream.print().setParallelism(8)
+    stream.print()
     env.execute()
  }
 
